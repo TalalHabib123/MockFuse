@@ -2,7 +2,7 @@ import InfoCard from "../components/layout/InfoCard";
 
 export default function HomePage({ onCreateProject }: { onCreateProject: () => void }) {
   return (
-    <div className="max-w-3xl">
+    <div className="max-w-full">
       {/* Top row */}
       <div className="flex items-start justify-between gap-4">
         <div>

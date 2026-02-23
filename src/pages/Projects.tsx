@@ -1,6 +1,6 @@
 export default function ProjectsPage() {
   return (
-    <div className="max-w-3xl">
+    <div className="max-w-full">
       <h2 className="text-xl font-semibold m-0">Projects</h2>
       <p className="mt-2 text-(--muted)">
         This is a placeholder. Next we’ll add: create project, import/export, and activate archive.
