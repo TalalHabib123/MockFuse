@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Sidebar, { type NavKey } from "./components/layout/Sidebar";
 import HomePage from "./pages/Home";
-import ProjectsPage from "./pages/Projects";
+import ProjectsPage from "./pages/Projects/Projects";
 import SettingsPage from "./pages/Settings";
 import { settingsGet, settingsSetLastActiveView } from "./core/settings";
 
