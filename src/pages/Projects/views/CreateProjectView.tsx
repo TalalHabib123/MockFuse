@@ -1,26 +1,24 @@
 import { useMemo, useState } from "react";
 import type { CreateProjectInput, ProjectSummary } from "../../../core/projects";
 import type { GatewayState } from "../../../core/gateway";
-import { gatewayStop } from "../../../core/gateway";
 
 export default function CreateProjectView({
   disabled,
   activeProject,
   gatewayState,
-  onCreate,
   onCancel,
+  onCreate,
 }: {
   disabled: boolean;
   activeProject: ProjectSummary | null;
   gatewayState: GatewayState;
-  onCreate: (input: CreateProjectInput) => Promise<void>;
   onCancel: () => void;
+  onCreate: (input: CreateProjectInput) => Promise<void>;
 }) {
   const [name, setName] = useState("");
   const [bindHost, setBindHost] = useState("127.0.0.1");
   const [port, setPort] = useState(4010);
   const [upstreamBaseUrl, setUpstreamBaseUrl] = useState("");
-  const [error, setError] = useState<string | null>(null);
 
   const canSubmit = useMemo(() => {
     if (!name.trim()) return false;
@@ -29,9 +27,11 @@ export default function CreateProjectView({
   }, [name, port]);
 
   const submit = async () => {
-    setError(null);
+    const trimmed = name.trim();
+    if (!trimmed) return;
 
-    // if active exists: prompt user to replace
+    // If active exists, confirm replacement
+    let replaceActive = false;
     if (activeProject) {
       const ok = confirm(
         gatewayState === "running"
@@ -39,28 +39,15 @@ export default function CreateProjectView({
           : `An active project exists (${activeProject.name}).\n\nArchive it and replace with the new project?`
       );
       if (!ok) return;
-
-      if (gatewayState === "running") {
-        await gatewayStop();
-      }
-
-      await onCreate({
-        name: name.trim(),
-        bindHost,
-        port,
-        upstreamBaseUrl: upstreamBaseUrl.trim() ? upstreamBaseUrl.trim() : null,
-        replaceActive: true,
-      });
-      return;
+      replaceActive = true;
     }
 
-    // no active: normal create
     await onCreate({
-      name: name.trim(),
+      name: trimmed,
       bindHost,
       port,
       upstreamBaseUrl: upstreamBaseUrl.trim() ? upstreamBaseUrl.trim() : null,
-      replaceActive: false,
+      replaceActive,
     });
   };
 
@@ -72,58 +59,60 @@ export default function CreateProjectView({
       </div>
 
       <div className="mt-4 grid gap-3">
-        <Field label="Project name">
-          <input
-            className="h-10 w-full rounded-xl border border-(--border) bg-(--bg) px-3 outline-none"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g., Payments Mock"
-            disabled={disabled}
-          />
-        </Field>
-
-        <div className="grid gap-3 md:grid-cols-2">
-          <Field label="Bind host">
-            <select
-              className="h-10 w-full rounded-xl border border-(--border) bg-(--bg) px-3 outline-none"
-              value={bindHost}
-              onChange={(e) => setBindHost(e.target.value)}
-              disabled={disabled}
-            >
-              <option value="127.0.0.1">127.0.0.1 (recommended)</option>
-              <option value="localhost">localhost</option>
-            </select>
-          </Field>
-
-          <Field label="Port">
+        <div>
+          <div className="text-sm font-medium">Project name</div>
+          <div className="mt-1">
             <input
               className="h-10 w-full rounded-xl border border-(--border) bg-(--bg) px-3 outline-none"
-              type="number"
-              value={port}
-              onChange={(e) => setPort(Number(e.target.value))}
-              min={1}
-              max={65535}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
               disabled={disabled}
             />
-          </Field>
+          </div>
         </div>
 
-        <Field label="Upstream base URL (optional)">
-          <input
-            className="h-10 w-full rounded-xl border border-(--border) bg-(--bg) px-3 outline-none"
-            value={upstreamBaseUrl}
-            onChange={(e) => setUpstreamBaseUrl(e.target.value)}
-            placeholder="https://api.your-backend.com"
-            disabled={disabled}
-          />
-        </Field>
-
-        {error && (
-          <div className="rounded-xl border border-(--border) bg-(--bg) p-3 text-sm">
-            <span className="text-(--muted)">Error: </span>
-            <span>{error}</span>
+        <div className="grid gap-3 md:grid-cols-2">
+          <div>
+            <div className="text-sm font-medium">Bind host</div>
+            <div className="mt-1">
+              <select
+                className="h-10 w-full rounded-xl border border-(--border) bg-(--bg) px-3 outline-none"
+                value={bindHost}
+                onChange={(e) => setBindHost(e.target.value)}
+                disabled={disabled}
+              >
+                <option value="127.0.0.1">127.0.0.1 (recommended)</option>
+                <option value="localhost">localhost</option>
+              </select>
+            </div>
           </div>
-        )}
+
+          <div>
+            <div className="text-sm font-medium">Port</div>
+            <div className="mt-1">
+              <input
+                className="h-10 w-full rounded-xl border border-(--border) bg-(--bg) px-3 outline-none"
+                type="number"
+                value={port}
+                onChange={(e) => setPort(Number(e.target.value))}
+                disabled={disabled}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div className="text-sm font-medium">Upstream base URL (optional)</div>
+          <div className="mt-1">
+            <input
+              className="h-10 w-full rounded-xl border border-(--border) bg-(--bg) px-3 outline-none"
+              value={upstreamBaseUrl}
+              onChange={(e) => setUpstreamBaseUrl(e.target.value)}
+              disabled={disabled}
+              placeholder="https://api.your-backend.com"
+            />
+          </div>
+        </div>
 
         <div className="mt-2 flex gap-2">
           <button
@@ -134,6 +123,7 @@ export default function CreateProjectView({
           >
             Create & Activate
           </button>
+
           <button
             type="button"
             className="h-10 px-4 rounded-xl border border-(--border) bg-(--bg) hover:brightness-105 focus:outline-none"
@@ -145,14 +135,5 @@ export default function CreateProjectView({
         </div>
       </div>
     </section>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <div className="text-sm font-medium">{label}</div>
-      <div className="mt-1">{children}</div>
-    </div>
   );
 }

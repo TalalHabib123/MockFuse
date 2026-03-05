@@ -2,19 +2,24 @@ import { openPath } from "@tauri-apps/plugin-opener";
 import type { ProjectSummary } from "../../../core/projects";
 import type { GatewayState } from "../../../core/gateway";
 import { gatewayStart, gatewayStop } from "../../../core/gateway";
-import { projectsArchiveActive } from "../../../core/projects";
+// import { projectsArchiveActive } from "../../../core/projects";
 import { displayPath } from "../utils/path";
+import { formatMeaningfulTime } from "../../../utils/time";
 
 export default function ActiveProjectSection({
   loading,
   project,
   gatewayState,
   onRefresh,
+  onArchive,
+  onOpen,
 }: {
   loading: boolean;
   project: ProjectSummary | null;
   gatewayState: GatewayState;
   onRefresh: () => Promise<void>;
+  onArchive: () => Promise<void>;
+  onOpen: (project: ProjectSummary) => void;
 }) {
   const canStart =
     !!project && project.routesCount > 0 && gatewayState !== "pending";
@@ -27,21 +32,21 @@ export default function ActiveProjectSection({
     await onRefresh();
   };
 
-  const onArchive = async () => {
-    if (!project) return;
+  // const onArchive = async () => {
+  //   if (!project) return;
 
-    // confirm
-    const ok = confirm(
-      isRunning
-        ? "Gateway is running. Stop it, then archive the active project?"
-        : "Archive the active project?",
-    );
-    if (!ok) return;
+  //   // confirm
+  //   const ok = confirm(
+  //     isRunning
+  //       ? "Gateway is running. Stop it, then archive the active project?"
+  //       : "Archive the active project?",
+  //   );
+  //   if (!ok) return;
 
-    if (isRunning) await gatewayStop();
-    await projectsArchiveActive();
-    await onRefresh();
-  };
+  //   if (isRunning) await gatewayStop();
+  //   await projectsArchiveActive();
+  //   await onRefresh();
+  // };
 
   const onOpenFolder = async () => {
     if (!project) return;
@@ -64,7 +69,7 @@ export default function ActiveProjectSection({
           <button
             type="button"
             className="h-10 px-4 rounded-xl border border-(--border) bg-(--bg) hover:brightness-105 focus:outline-none"
-            onClick={onArchive}
+            onClick={() => void onArchive()}
             disabled={!project || loading}
           >
             Archive
@@ -103,27 +108,41 @@ export default function ActiveProjectSection({
         {loading ? (
           <div className="text-(--muted)">Loading…</div>
         ) : project ? (
-          <div className="rounded-xl border border-(--border) bg-(--bg) p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="font-semibold truncate">{project.name}</div>
+          <div className="relative rounded-xl border border-(--border) bg-(--bg) pt-3 p-4 items-center justify-between gap-3">
+            {/* absolute, top-left timestamp — doesn't affect layout or capture pointer events */}
+            <div className="absolute top-1.5 right-3 text-xs text-(--muted) whitespace-nowrap pointer-events-none z-10">
+              {project.updatedAt ? `Updated ${formatMeaningfulTime(project.updatedAt)}` : "—"}
+            </div>
 
-                <div
-                  className="mt-1 text-sm text-(--muted) truncate"
-                  title={project.rootDir}
-                >
-                  {displayPath(project.rootDir)}
-                </div>
+            <div className="flex items-center justify-between gap-3 pt-0">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-semibold truncate">{project.name}</div>
 
-                <div className="mt-2 text-xs text-(--muted)">
-                  Endpoints:{" "}
-                  <span className="font-medium">{project.routesCount}</span>
+                  <div
+                    className="mt-1 text-sm text-(--muted) truncate"
+                    title={project.rootDir}
+                  >
+                    {displayPath(project.rootDir)}
+                  </div>
+
+                  <div className="mt-2 text-xs text-(--muted)">
+                    Endpoints:{" "}
+                    <span className="font-medium">{project.routesCount}</span>
+                  </div>
                 </div>
               </div>
-
-              <div className="text-xs text-(--muted) whitespace-nowrap">
-                {project.updatedAt ? `Updated ${project.updatedAt}` : "—"}
-              </div>
+              <button
+                type="button"
+                className="h-10 px-4 mt-2 rounded-xl border border-(--border) bg-(--bg) hover:brightness-105 focus:outline-none"
+                disabled={!project || loading}
+                onClick={() => {
+                  if (project) onOpen(project);
+                }}
+                title={!project ? "No active project" : "Open project"}
+              >
+                Open
+              </button>
             </div>
           </div>
         ) : (

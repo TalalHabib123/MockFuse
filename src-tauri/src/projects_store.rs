@@ -19,7 +19,8 @@ pub struct ProjectRecord {
     pub updated_at: Option<String>,
     #[serde(default)]
     pub archived: bool,
-
+    #[serde(default)]
+    pub routes_count: u32,
     #[serde(default)]
     pub gateway: Option<GatewayConfig>,
     #[serde(default)]
@@ -44,6 +45,18 @@ impl Default for ProjectsFile {
             projects: vec![],
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateProjectInput {
+    pub name: String,
+    pub bind_host: String,
+    pub port: u16,
+    #[serde(default)]
+    pub upstream_base_url: Option<String>,
+    #[serde(default)]
+    pub replace_active: bool,
 }
 
 pub struct ProjectsStore {
@@ -123,17 +136,73 @@ impl ProjectsStore {
         s.to_string()
     }
 
-    pub fn create_project(
-        &self,
-        name: String,
-        bind_host: String,
-        port: u16,
-        upstream_base_url: Option<String>,
-    ) -> Result<ProjectRecord, String> {
-        if name.trim().is_empty() {
+    pub fn archive_active(&self) -> Result<(), String> {
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|_| "projects mutex poisoned".to_string())?;
+
+        let active_id = guard
+            .active_project_id
+            .clone()
+            .ok_or("no active project to archive")?;
+
+        let stamp = Self::now_stamp();
+
+        let p = guard
+            .projects
+            .iter_mut()
+            .find(|p| p.id == active_id)
+            .ok_or("active project not found in store")?;
+
+        p.archived = true;
+        p.updated_at = Some(stamp);
+
+        guard.active_project_id = None;
+
+        self.save(&guard)?;
+        Ok(())
+    }
+
+    pub fn restore_project(&self, id: &str) -> Result<ProjectRecord, String> {
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|_| "projects mutex poisoned".to_string())?;
+        let stamp = Self::now_stamp();
+
+        // Archive currently active project, if any
+        if let Some(active_id) = guard.active_project_id.clone() {
+            if active_id != id {
+                if let Some(active) = guard.projects.iter_mut().find(|p| p.id == active_id) {
+                    active.archived = true;
+                    active.updated_at = Some(stamp.clone());
+                }
+            }
+        }
+
+        let target = guard
+            .projects
+            .iter_mut()
+            .find(|p| p.id == id)
+            .ok_or("project to restore not found")?;
+
+        target.archived = false;
+        target.updated_at = Some(stamp);
+        let restored = target.clone();
+
+        guard.active_project_id = Some(id.to_string());
+
+        self.save(&guard)?;
+        Ok(restored)
+    }
+
+    pub fn create_project(&self, input: CreateProjectInput) -> Result<ProjectRecord, String> {
+        let name = input.name.trim();
+        if name.is_empty() {
             return Err("project name is required".into());
         }
-        if port == 0 {
+        if input.port == 0 || input.port > 65535 {
             return Err("port must be 1..65535".into());
         }
 
@@ -142,17 +211,26 @@ impl ProjectsStore {
             .lock()
             .map_err(|_| "projects mutex poisoned".to_string())?;
 
-        // archive current active (v1 rule: one active at a time)
-        if let Some(active_id) = guard.active_project_id.clone() {
-            if let Some(p) = guard.projects.iter_mut().find(|p| p.id == active_id) {
-                p.archived = true;
-                p.updated_at = Some(Self::now_stamp());
+        // If active exists and replace is not allowed -> reject
+        if guard.active_project_id.is_some() && !input.replace_active {
+            return Err("active project exists; set replaceActive=true to replace it".into());
+        }
+
+        // If replacing, archive current active (UI stops gateway first)
+        if input.replace_active {
+            if let Some(active_id) = guard.active_project_id.clone() {
+                if let Some(p) = guard.projects.iter_mut().find(|p| p.id == active_id) {
+                    p.archived = true;
+                    p.updated_at = Some(Self::now_stamp());
+                }
+                guard.active_project_id = None;
             }
         }
 
         let id = Uuid::new_v4().to_string();
+        let stamp = Self::now_stamp();
 
-        // store each project under app_data/projects/<id>/project.yaml
+        // Store per-project YAML in: <app_data>/projects/<id>/project.yaml
         let base_dir = self
             .path
             .parent()
@@ -160,10 +238,10 @@ impl ProjectsStore {
             .join("projects");
 
         let project_dir = base_dir.join(&id);
-        fs::create_dir_all(&project_dir).map_err(|e| e.to_string())?;
-
+        std::fs::create_dir_all(&project_dir).map_err(|e| e.to_string())?;
         let project_yaml_path = project_dir.join("project.yaml");
 
+        // Minimal per-project YAML (routes empty for now)
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
         struct ProjectYaml<'a> {
@@ -172,35 +250,41 @@ impl ProjectsStore {
             name: &'a str,
             gateway: GatewayConfig,
             upstream_base_url: Option<String>,
+            routes: Vec<serde_yaml::Value>,
             created_at: String,
             updated_at: String,
         }
 
-        let stamp = Self::now_stamp();
         let yaml = ProjectYaml {
             schema_version: 0,
             id: &id,
-            name: name.trim(),
+            name,
             gateway: GatewayConfig {
-                bind_host: bind_host.clone(),
-                port,
+                bind_host: input.bind_host.clone(),
+                port: input.port,
             },
-            upstream_base_url: upstream_base_url.clone(),
+            upstream_base_url: input.upstream_base_url.clone(),
+            routes: vec![],
             created_at: stamp.clone(),
             updated_at: stamp.clone(),
         };
 
         let txt = serde_yaml::to_string(&yaml).map_err(|e| e.to_string())?;
-        fs::write(&project_yaml_path, txt).map_err(|e| e.to_string())?;
+        std::fs::write(&project_yaml_path, txt).map_err(|e| e.to_string())?;
 
+        // Add record to projects.yaml
         let rec = ProjectRecord {
             id: id.clone(),
-            name: name.trim().to_string(),
+            name: name.to_string(),
             root_dir: project_dir.to_string_lossy().to_string(),
             updated_at: Some(stamp),
             archived: false,
-            gateway: Some(GatewayConfig { bind_host, port }),
-            upstream_base_url,
+            routes_count: 0,
+            gateway: Some(GatewayConfig {
+                bind_host: input.bind_host,
+                port: input.port,
+            }),
+            upstream_base_url: input.upstream_base_url,
         };
 
         guard.projects.push(rec.clone());

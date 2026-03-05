@@ -2,7 +2,7 @@ use crate::state::AppStateHandle;
 use serde::Serialize;
 use tauri::State;
 
-use crate::projects_store::{ProjectRecord, ProjectsStore};
+use crate::projects_store::{ProjectRecord, ProjectsStore, CreateProjectInput};
 
 #[tauri::command]
 pub fn project_set_active(state: AppStateHandle, path: String) -> Result<(), String> {
@@ -38,11 +38,32 @@ pub fn projects_get_overview(store: State<'_, ProjectsStore>) -> Result<Projects
 
 #[tauri::command]
 pub fn projects_create_project(
-    store: State<'_, ProjectsStore>,
-    name: String,
-    bind_host: String,
-    port: u16,
-    upstream_base_url: Option<String>,
+  store: State<'_, ProjectsStore>,
+  name: String,
+  bind_host: String,
+  port: u16,
+  upstream_base_url: Option<String>,
+  replace_active: Option<bool>,
 ) -> Result<ProjectRecord, String> {
-    store.create_project(name, bind_host, port, upstream_base_url)
+  let input = CreateProjectInput {
+    name,
+    bind_host,
+    port,
+    upstream_base_url,
+    replace_active: replace_active.unwrap_or(false),
+  };
+  store.create_project(input)
+}
+
+#[tauri::command]
+pub fn projects_archive_active(store: State<'_, ProjectsStore>) -> Result<(), String> {
+  store.archive_active()
+}
+
+#[tauri::command]
+pub fn projects_restore_project(
+  store: State<'_, ProjectsStore>,
+  id: String,
+) -> Result<ProjectRecord, String> {
+  store.restore_project(&id)
 }

@@ -18,7 +18,7 @@ export type CreateProjectInput = {
   bindHost: string;
   port: number;
   upstreamBaseUrl?: string | null;
-  replaceActive?: boolean; // <— new
+  replaceActive?: boolean;
 };
 
 export async function projectsGetOverview() {
@@ -26,7 +26,13 @@ export async function projectsGetOverview() {
 }
 
 export async function projectsCreate(input: CreateProjectInput) {
-  return invoke<ProjectSummary>("projects_create_project", input);
+  return invoke<ProjectSummary>("projects_create_project", {
+    name: input.name,
+    bindHost: input.bindHost,
+    port: input.port,
+    upstreamBaseUrl: input.upstreamBaseUrl ?? null,
+    replaceActive: input.replaceActive ?? false,
+  });
 }
 
 export async function projectsArchiveActive() {

@@ -38,6 +38,9 @@ fn main() {
             commands::project::project_get_active,
             commands::project::projects_get_overview,
             commands::project::projects_create_project,
+
+            commands::project::projects_archive_active,
+            commands::project::projects_restore_project,
             // new
             commands::settings::settings_get,
             commands::settings::settings_set_theme_preference,
