@@ -11,6 +11,13 @@ node_modules
 dist
 dist-ssr
 *.local
+.gocache
+.appdata
+.wails-sample
+frontend/.pnpm-store
+build/bin
+frontend/package.json.md5
+frontend/_tmp_*
 
 # Editor directories and files
 .vscode/*
@@ -22,3 +29,5 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+build/
